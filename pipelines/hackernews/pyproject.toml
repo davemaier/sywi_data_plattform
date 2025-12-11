@@ -1,0 +1,14 @@
+[project]
+name = "hackernews-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "dagster",
+    "dagster-postgres",
+    "pandas",
+    "requests",
+    "duckdb",
+]
+
+[tool.uv]
+dev-dependencies = []

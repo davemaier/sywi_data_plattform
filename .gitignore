@@ -2,6 +2,9 @@
 docker-compose.override.generated.yaml
 workspace.generated.yaml
 
+# Environment variables (contains secrets)
+.env
+
 # Python
 __pycache__/
 *.pyc

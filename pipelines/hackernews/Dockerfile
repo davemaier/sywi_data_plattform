@@ -4,13 +4,13 @@ FROM my-platform-base:latest
 COPY _shared/ /opt/dagster/app/_shared/
 
 # Copy dependency files (for caching)
-COPY _template/pyproject.toml _template/uv.lock* ./
+COPY hackernews/pyproject.toml hackernews/uv.lock* ./
 
 # Install Python dependencies
 RUN uv sync --frozen || uv sync
 
 # Copy the rest of the project
-COPY _template/repo/ ./repo/
+COPY hackernews/repo/ ./repo/
 
 # Run the Dagster gRPC server
 CMD ["uv", "run", "dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "repo/defs.py"]
