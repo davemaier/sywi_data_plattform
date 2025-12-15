@@ -1,9 +1,11 @@
 # Generated files
 docker-compose.override.generated.yaml
+docker-compose.dev.generated.yaml
 workspace.generated.yaml
 
 # Environment variables (contains secrets)
 .env
+.env.local
 
 # Local dev outputs
 *.csv
