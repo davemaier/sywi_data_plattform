@@ -71,7 +71,12 @@ This will:
 
 #### 2. Hot Reload
 
-After editing code in `pipelines/<name>/assets/`, click the **"Reload"** button in the Dagster UI to reload the code location. Volume mounts keep source files in sync with containers.
+The dev environment uses `watchfiles` to automatically restart the Dagster gRPC server when code changes. After editing files in `pipelines/<name>/assets/`, `_shared/`, or `defs.py`:
+
+1. The pipeline container detects the change and restarts the gRPC server automatically
+2. Click **"Reload"** in the Dagster UI to reload the code location
+
+This enables fast iteration without manually restarting containers.
 
 #### 3. Pull Data from Production (Optional)
 
@@ -262,6 +267,7 @@ Base image used by all services. Contains:
 - R runtime
 - uv package manager
 - Dagster core packages
+- watchfiles (for dev hot reload)
 
 #### Pipeline Dockerfiles
 
