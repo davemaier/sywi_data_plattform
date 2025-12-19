@@ -253,7 +253,7 @@ This enables a simple CI/CD workflow:
 #### `generate_platform.py` - Config Generator
 
 Scans the `pipelines/` directory and generates:
-- `docker-compose.override.generated.yaml` - Container definitions for each pipeline
+- `docker-compose.prod.generated.yaml` - Container definitions for each pipeline
 - `workspace.generated.yaml` - Dagster workspace config with gRPC endpoints
 
 Each pipeline in `pipelines/<name>/` (excluding `_shared` and `_template`) gets its own container.
@@ -279,7 +279,7 @@ Each pipeline has its own `Dockerfile` (e.g., `pipelines/hackernews/Dockerfile`)
 
 ### Core Services
 
-Defined in `docker-compose.core.yaml`:
+Defined in `docker-compose.base.yaml`:
 
 | Service | Description |
 |---------|-------------|
@@ -298,7 +298,7 @@ sywi_data_plattform/
 ├── pyproject.toml            # Minimal deps for utility commands
 ├── dagster.yaml              # Dagster instance config (production)
 ├── Dockerfile.base           # Base Docker image
-├── docker-compose.core.yaml  # Core services (Postgres, Dagster)
+├── docker-compose.base.yaml  # Base services (Postgres, Dagster)
 ├── data/                     # Local DuckLake data (gitignored)
 ├── pipelines/
 │   ├── _shared/              # Shared resources (copied into all containers)

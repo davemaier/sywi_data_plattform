@@ -11,7 +11,7 @@ import os
 import yaml
 
 PIPELINE_DIR = "./pipelines"
-COMPOSE_PROD_FILE = "docker-compose.override.generated.yaml"
+COMPOSE_PROD_FILE = "docker-compose.prod.generated.yaml"
 COMPOSE_DEV_FILE = "docker-compose.dev.generated.yaml"
 WORKSPACE_FILE = "workspace.generated.yaml"
 
