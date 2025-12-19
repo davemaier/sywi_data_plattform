@@ -21,3 +21,6 @@ __pycache__/
 
 # Docker volumes (if any local)
 data/
+
+# Temp dir
+temp/

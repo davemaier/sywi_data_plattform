@@ -76,6 +76,9 @@ projects = [
     if os.path.isdir(os.path.join(PIPELINE_DIR, d)) and not d.startswith("_")
 ]
 
+# Collect all pipeline service names first
+pipeline_services = [f"pipeline_{project}" for project in projects]
+
 for project in projects:
     service_name = f"pipeline_{project}"
 
@@ -112,12 +115,45 @@ for project in projects:
         "expose": ["4000"],
         "networks": ["dagster_network"],
         "depends_on": ["postgresql"],
+        "healthcheck": {
+            "test": [
+                "CMD",
+                "python",
+                "-c",
+                "import socket; s=socket.socket(); s.connect(('localhost', 4000)); s.close()",
+            ],
+            "interval": "5s",
+            "timeout": "3s",
+            "retries": 10,
+            "start_period": "5s",
+        },
     }
 
     # Workspace Entry
     workspace_entries["load_from"].append(
         {"grpc_server": {"host": service_name, "port": 4000, "location_name": project}}
     )
+
+# Add pipeline services as dependencies for webserver and daemon
+# Using condition: service_healthy ensures gRPC servers are ready before connecting
+if pipeline_services:
+    # Convert simple depends_on list to dict format with conditions
+    webserver_deps = {
+        dep: {"condition": "service_started"}
+        for dep in compose_dev["services"]["dagster_webserver"]["depends_on"]
+    }
+    daemon_deps = {
+        dep: {"condition": "service_started"}
+        for dep in compose_dev["services"]["dagster_daemon"]["depends_on"]
+    }
+
+    # Add pipeline services with service_healthy condition
+    for svc in pipeline_services:
+        webserver_deps[svc] = {"condition": "service_healthy"}
+        daemon_deps[svc] = {"condition": "service_healthy"}
+
+    compose_dev["services"]["dagster_webserver"]["depends_on"] = webserver_deps
+    compose_dev["services"]["dagster_daemon"]["depends_on"] = daemon_deps
 
 # Write production compose override
 with open(COMPOSE_PROD_FILE, "w") as f:

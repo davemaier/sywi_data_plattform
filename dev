@@ -134,7 +134,8 @@ case "$1" in
             exit 1
         fi
 
-        uv run python -c "
+        # Run inside the webserver container to use the correct Dagster instance
+        docker compose -f "$DEV_COMPOSE" exec dagster_webserver python -c "
 from dagster import DagsterInstance, AssetKey
 from dagster import AssetMaterialization
 
@@ -148,8 +149,8 @@ for asset_name in assets:
     instance.report_runless_asset_event(
         AssetMaterialization(
             asset_key=key,
-            description='Manually marked as materialized (pulled from remote)',
-            metadata={'source': 'dev.sh mark'}
+            description='Manually marked as materialized',
+            metadata={'source': 'dev mark'}
         )
     )
     print(f'Marked {asset_name} as materialized')
@@ -366,26 +367,24 @@ SELECT '${TABLE}: ' || COUNT(*) || ' rows pulled' FROM local.${TABLE};
             fi
             uv run duckdb -c "$SQL" 2>/dev/null | tail -n +3
 
-            # Mark matching asset as materialized if it exists
-            uv run python -c "
+            # Mark matching asset as materialized if it exists (run inside Docker)
+            docker compose -f "$DEV_COMPOSE" exec -T dagster_webserver python -c "
 from dagster import DagsterInstance, AssetKey, AssetMaterialization
 
 instance = DagsterInstance.get()
 asset_name = '${TABLE}'
 key = AssetKey(asset_name)
 
-# Check if asset exists in any code location
 try:
     instance.report_runless_asset_event(
         AssetMaterialization(
             asset_key=key,
             description='Pulled from remote DuckLake',
-            metadata={'source': 'dev.sh pull'}
+            metadata={'source': 'dev pull'}
         )
     )
     print(f'Marked {asset_name} as materialized')
 except Exception as e:
-    # Asset might not exist, that's ok
     pass
 " 2>/dev/null || true
         fi
