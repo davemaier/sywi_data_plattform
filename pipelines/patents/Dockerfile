@@ -12,6 +12,7 @@ RUN uv sync --frozen || uv sync
 # Copy the pipeline code
 COPY patents/assets/ ./assets/
 COPY patents/resources/ ./resources/
+COPY patents/raw_data/ ./raw_data/
 COPY patents/defs.py ./
 
 # Run the Dagster gRPC server
