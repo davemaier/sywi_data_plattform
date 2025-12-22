@@ -2,7 +2,7 @@
 
 import os
 
-from dagster import Definitions
+from dagster import Definitions, with_source_code_references
 
 from _shared import ducklake_io_manager, DuckLakeResource
 from assets import (
@@ -72,13 +72,15 @@ def _get_ducklake_resource() -> DuckLakeResource:
 
 
 defs = Definitions(
-    assets=[
-        hackernews_top_stories_ids,
-        hackernews_titles,
-        hackernews_stories,
-        save_to_csv,
-        story_analytics,
-    ],
+    assets=with_source_code_references(
+        [
+            hackernews_top_stories_ids,
+            hackernews_titles,
+            hackernews_stories,
+            save_to_csv,
+            story_analytics,
+        ]
+    ),
     resources={
         "io_manager": ducklake_io_manager.configured(_get_ducklake_config()),
         "ducklake": _get_ducklake_resource(),

@@ -1,3 +1,3 @@
-# Export your assets here
-# from .my_asset import my_asset
-# __all__ = ["my_asset"]
+from .hello_world import hello_world
+
+__all__ = ["hello_world"]

@@ -2,7 +2,7 @@
 
 import os
 
-from dagster import Definitions
+from dagster import Definitions, with_source_code_references
 
 from _shared import ducklake_io_manager, DuckLakeResource
 from resources import FalkorDBResource, Neo4jResource
@@ -103,22 +103,24 @@ def _get_neo4j_resource() -> Neo4jResource:
 
 
 defs = Definitions(
-    assets=[
-        # Ingestion (group: patent_ingestion)
-        evaluation_patents,
-        raw_patents_data,
-        cleaned_patents_data,
-        # Extraction (group: patent_extraction)
-        patent_problems_solutions,
-        patent_embeddings,
-        extraction_generation_metadata,
-        embeddings_generation_metadata,
-        # Knowledge Graph (group: patent_graph)
-        patent_knowledge_graph,
-        patent_knowledge_graph_dense,
-        patent_graph_neo4j_replica,
-        patent_similarity_distribution,
-    ],
+    assets=with_source_code_references(
+        [
+            # Ingestion (group: patent_ingestion)
+            evaluation_patents,
+            raw_patents_data,
+            cleaned_patents_data,
+            # Extraction (group: patent_extraction)
+            patent_problems_solutions,
+            patent_embeddings,
+            extraction_generation_metadata,
+            embeddings_generation_metadata,
+            # Knowledge Graph (group: patent_graph)
+            patent_knowledge_graph,
+            patent_knowledge_graph_dense,
+            patent_graph_neo4j_replica,
+            patent_similarity_distribution,
+        ]
+    ),
     resources={
         "io_manager": ducklake_io_manager.configured(_get_ducklake_config()),
         "ducklake": _get_ducklake_resource(),

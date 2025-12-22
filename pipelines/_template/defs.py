@@ -2,9 +2,12 @@
 
 import os
 
-from dagster import Definitions, asset
+from dagster import Definitions, with_source_code_references
 
 from _shared import ducklake_io_manager, DuckLakeResource
+from assets import (
+    hello_world,
+)
 
 
 def _get_ducklake_config() -> dict:
@@ -64,15 +67,12 @@ def _get_ducklake_resource() -> DuckLakeResource:
     return DuckLakeResource(**kwargs)
 
 
-# Example asset - replace with your own
-@asset(group_name="my_pipeline")
-def hello_world():
-    """A simple hello world asset."""
-    return "Hello from this pipeline!"
-
-
 defs = Definitions(
-    assets=[hello_world],
+    assets=with_source_code_references(
+        [
+            hello_world,
+        ]
+    ),
     resources={
         "io_manager": ducklake_io_manager.configured(_get_ducklake_config()),
         "ducklake": _get_ducklake_resource(),
