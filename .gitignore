@@ -1,6 +1,5 @@
 # Generated files
-docker-compose.override.generated.yaml
-docker-compose.dev.generated.yaml
+*.generated.yaml
 workspace.generated.yaml
 
 # Environment variables (contains secrets)
@@ -23,3 +22,4 @@ data/
 
 # Temp dir
 temp/
+docs-temp/
