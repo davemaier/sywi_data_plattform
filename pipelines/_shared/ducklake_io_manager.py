@@ -153,6 +153,33 @@ class DuckLakeIOManager(IOManager):
                 context.log.info(f"Table {full_table_name} does not exist, creating it")
 
             if table_exists:
+                # Add any new columns that exist in DataFrame but not in table
+                # Get existing table columns
+                existing_cols = conn.execute(
+                    f"SELECT column_name FROM information_schema.columns WHERE table_name = '{table_name}'"
+                ).fetchall()
+                existing_col_names = {row[0] for row in existing_cols}
+
+                # Add missing columns
+                for col in df.columns:
+                    if col not in existing_col_names:
+                        # Infer DuckDB type from pandas dtype
+                        dtype = df[col].dtype
+                        if dtype == "bool":
+                            duck_type = "BOOLEAN"
+                        elif dtype == "int64":
+                            duck_type = "BIGINT"
+                        elif dtype == "float64":
+                            duck_type = "DOUBLE"
+                        else:
+                            duck_type = "VARCHAR"
+                        context.log.info(
+                            f"Adding new column {col} ({duck_type}) to {full_table_name}"
+                        )
+                        conn.execute(
+                            f"ALTER TABLE {full_table_name} ADD COLUMN {col} {duck_type}"
+                        )
+
                 # Delete all rows and insert new data
                 conn.execute(f"DELETE FROM {full_table_name};")
                 conn.execute(f"INSERT INTO {full_table_name} SELECT * FROM asset_df")

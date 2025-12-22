@@ -142,7 +142,7 @@ def raw_patents_data(context: AssetExecutionContext) -> pd.DataFrame:
     description="Cleans patent data including removing excessive newlines from text fields",
     kinds={"python", "pandas"},
     deps=["evaluation_patents"],
-    code_version="1.5.0",
+    code_version="1.6.0",
 )
 def cleaned_patents_data(
     context: AssetExecutionContext, ducklake: DuckLakeResource
