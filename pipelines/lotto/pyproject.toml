@@ -1,0 +1,14 @@
+[project]
+name = "lotto-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "dagster",
+    "dagster-postgres",
+    "pandas",
+    "duckdb",
+    # Add your pipeline-specific dependencies here
+]
+
+[tool.uv]
+dev-dependencies = []

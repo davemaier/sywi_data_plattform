@@ -34,14 +34,14 @@ library(sywi.duckdb)
 con <- dbConnect(sywi_duckdb())
 
 # Query local database
-dbGetQuery(con, "SELECT * FROM local.my_table")
+local_data <- dbGetQuery(con, "SELECT * FROM local.my_table")
 
 # Query remote database (read-only)
-dbGetQuery(con, "SELECT * FROM remote.my_table")
+remote_data <- dbGetQuery(con, "SELECT * FROM remote.my_table")
 
 # List tables
-dbGetQuery(con, "SHOW TABLES FROM local")
-dbGetQuery(con, "SHOW TABLES FROM remote")
+local_tables <- dbGetQuery(con, "SHOW TABLES FROM local")
+remote_tables <- dbGetQuery(con, "SHOW TABLES FROM remote")
 
 # Copy from remote to local
 dbExecute(con, "CREATE OR REPLACE TABLE local.my_table AS SELECT * FROM remote.my_table")
