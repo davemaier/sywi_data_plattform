@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "start": "uv run python dev.py --help",
+    "up": "uv run python dev.py up",
+    "down": "uv run python dev.py down",
+    "new": "uv run python dev.py new",
+    "build": "uv run python dev.py build",
+    "logs": "uv run python dev.py logs",
+    "db": "uv run python dev.py db",
+    "db-remote": "uv run python dev.py db-remote",
+    "export": "uv run python dev.py export",
+    "pull": "uv run python dev.py pull",
+    "mark": "uv run python dev.py mark"
+  }
+}
