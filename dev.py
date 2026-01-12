@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import duckdb
 import typer
 from dotenv import load_dotenv
 from rich.console import Console
@@ -175,7 +176,7 @@ def up():
     console.print("Hot reload: Edit code, then click 'Reload' in the Dagster UI")
     console.print()
 
-    docker_compose("up", "--build")
+    docker_compose("up")
 
 
 @app.command()
@@ -274,15 +275,7 @@ def logs(
 def db():
     """Open interactive DuckDB session (local + remote attached)."""
     sql = build_duckdb_init_sql(include_remote=True)
-    run(["uv", "run", "duckdb", "-cmd", sql])
-
-
-@app.command("db-remote")
-def db_remote():
-    """Open interactive DuckDB session (remote only)."""
-    require_env("DUCKLAKE_REMOTE_CATALOG_DSN")
-    sql = build_duckdb_init_sql(remote_only=True)
-    run(["uv", "run", "duckdb", "-cmd", sql])
+    run(["uv", "run", "python", "-m", "duckdb.cli", "-cmd", sql])
 
 
 @app.command("export")
@@ -312,25 +305,21 @@ def export_table(
 
     if source == "remote":
         require_env("DUCKLAKE_REMOTE_CATALOG_DSN")
-        sql = build_duckdb_init_sql(remote_only=True)
-        sql += f"""
-COPY (SELECT * FROM remote.{table}) TO '{output_file}' ({format_opts});
-SELECT '{output_file}: ' || COUNT(*) || ' rows exported from remote' FROM remote.{table};
-"""
+        init_sql = build_duckdb_init_sql(remote_only=True)
+        source_table = f"remote.{table}"
     else:
-        sql = build_duckdb_init_sql()
-        sql += f"""
-COPY (SELECT * FROM local.{table}) TO '{output_file}' ({format_opts});
-SELECT '{output_file}: ' || COUNT(*) || ' rows exported from local' FROM local.{table};
-"""
+        init_sql = build_duckdb_init_sql()
+        source_table = f"local.{table}"
 
-    result = run(["uv", "run", "duckdb", "-c", sql], capture_output=True)
-    # Print only the result line (skip header lines)
-    lines = result.stdout.strip().splitlines()
-    if len(lines) >= 3:
-        console.print(lines[-1])
-    else:
-        console.print(result.stdout)
+    copy_sql = f"COPY (SELECT * FROM {source_table}) TO '{output_file}' ({format_opts})"
+    count_sql = f"SELECT COUNT(*) FROM {source_table}"
+
+    conn = duckdb.connect()
+    conn.execute(init_sql)
+    conn.execute(copy_sql)
+    result = conn.execute(count_sql).fetchone()
+    row_count = result[0] if result else 0
+    console.print(f"{output_file}: {row_count} rows exported from {source}")
 
 
 @app.command()
@@ -346,41 +335,29 @@ def pull(
     # Ensure data directory exists
     (SCRIPT_DIR / "data").mkdir(parents=True, exist_ok=True)
 
+    init_sql = build_duckdb_init_sql(include_remote=True)
+    conn = duckdb.connect()
+    conn.execute(init_sql)
+
     if table is None:
         # List tables
-        sql = build_duckdb_init_sql(include_remote=True)
-        sql += "\nSELECT name FROM (SHOW TABLES FROM remote);"
-
         console.print("Remote tables:")
-        result = run(
-            ["uv", "run", "duckdb", "-noheader", "-list", "-c", sql],
-            capture_output=True,
-        )
-        console.print(result.stdout)
+        tables = conn.execute("SELECT name FROM (SHOW TABLES FROM remote)").fetchall()
+        for row in tables:
+            console.print(row[0])
     else:
         # Pull table
-        sql = build_duckdb_init_sql(include_remote=True)
-
+        conn.execute(f"DROP TABLE IF EXISTS local.{table}")
         if limit:
-            sql += f"""
-DROP TABLE IF EXISTS local.{table};
-CREATE TABLE local.{table} AS SELECT * FROM remote.{table} LIMIT {limit};
-SELECT '{table}: ' || COUNT(*) || ' rows pulled' FROM local.{table};
-"""
+            conn.execute(
+                f"CREATE TABLE local.{table} AS SELECT * FROM remote.{table} LIMIT {limit}"
+            )
         else:
-            sql += f"""
-DROP TABLE IF EXISTS local.{table};
-CREATE TABLE local.{table} AS SELECT * FROM remote.{table};
-SELECT '{table}: ' || COUNT(*) || ' rows pulled' FROM local.{table};
-"""
+            conn.execute(f"CREATE TABLE local.{table} AS SELECT * FROM remote.{table}")
 
-        result = run(["uv", "run", "duckdb", "-c", sql], capture_output=True)
-        # Print only the result line
-        lines = result.stdout.strip().splitlines()
-        if len(lines) >= 3:
-            console.print(lines[-1])
-        else:
-            console.print(result.stdout)
+        result = conn.execute(f"SELECT COUNT(*) FROM local.{table}").fetchone()
+        row_count = result[0] if result else 0
+        console.print(f"{table}: {row_count} rows pulled")
 
         # Mark asset as materialized in Dagster
         mark_script = f"""

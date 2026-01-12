@@ -135,7 +135,7 @@ for project in projects:
     )
 
 # Add pipeline services as dependencies for webserver and daemon
-# Using condition: service_healthy ensures gRPC servers are ready before connecting
+# Using condition: service_started allows faster startup - Dagster handles reconnection
 if pipeline_services:
     # Convert simple depends_on list to dict format with conditions
     webserver_deps = {
@@ -147,10 +147,10 @@ if pipeline_services:
         for dep in compose_dev["services"]["dagster_daemon"]["depends_on"]
     }
 
-    # Add pipeline services with service_healthy condition
+    # Add pipeline services with service_started condition (Dagster handles reconnection)
     for svc in pipeline_services:
-        webserver_deps[svc] = {"condition": "service_healthy"}
-        daemon_deps[svc] = {"condition": "service_healthy"}
+        webserver_deps[svc] = {"condition": "service_started"}
+        daemon_deps[svc] = {"condition": "service_started"}
 
     compose_dev["services"]["dagster_webserver"]["depends_on"] = webserver_deps
     compose_dev["services"]["dagster_daemon"]["depends_on"] = daemon_deps
