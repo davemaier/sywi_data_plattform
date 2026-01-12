@@ -13,7 +13,7 @@ The platform uses DuckLake as its data lakehouse, which provides:
 
 | Mode | Catalog | Storage | Use Case |
 |------|---------|---------|----------|
-| Local | DuckDB file | Local files | Development |
+| Local | PostgreSQL | Local files | Development |
 | Production | PostgreSQL | S3/MinIO | Server deployment |
 
 The same pipeline code works in both modes - only the configuration differs.
@@ -36,7 +36,7 @@ cd sywi_data_plattform
 cp .env.example .env.local
 
 # 3. Start Dagster (Docker Compose)
-./dev up
+uv run dev up
 ```
 
 Open http://localhost:3000 in your browser.
@@ -46,14 +46,14 @@ Open http://localhost:3000 in your browser.
 The `.env.local` file for local development:
 
 ```bash
-# Local mode - file-based DuckLake (no infrastructure needed)
-DUCKLAKE_CATALOG_DSN=./data/ducklake.ducklake
+# Local mode - PostgreSQL catalog with local parquet storage
+DUCKLAKE_CATALOG_DSN="dbname=ducklake_catalog host=postgresql user=dagster_user password=dagster_password port=5432"
 DUCKLAKE_DATA_PATH=./data/
-DUCKLAKE_SCHEMA=sywi
+DUCKLAKE_SCHEMA=local
 ```
 
-That's it! DuckLake will store:
-- Catalog metadata in `./data/ducklake.ducklake` (DuckDB file)
+DuckLake will store:
+- Catalog metadata in PostgreSQL (shared with Dagster)
 - Table data as Parquet files in `./data/`
 
 ### Development Workflow
@@ -61,7 +61,7 @@ That's it! DuckLake will store:
 #### 1. Start Dagster
 
 ```bash
-./dev up
+uv run dev up
 ```
 
 This will:
@@ -96,13 +96,13 @@ Then pull tables:
 
 ```bash
 # List available tables on remote
-./dev pull
+uv run dev pull
 
 # Pull a complete table
-./dev pull hackernews_stories
+uv run dev pull hackernews_stories
 
 # Pull only 1000 rows (for faster iteration)
-./dev pull hackernews_stories 1000
+uv run dev pull hackernews_stories 1000
 ```
 
 When you pull a table, the matching Dagster asset is automatically marked as materialized.
@@ -116,8 +116,8 @@ Use the Dagster UI at http://localhost:3000 to materialize assets.
 If you've manually loaded data or want to skip upstream assets:
 
 ```bash
-./dev mark hackernews_top_stories
-./dev mark asset1,asset2,asset3
+uv run dev mark hackernews_top_stories
+uv run dev mark asset1,asset2,asset3
 ```
 
 ### Inspecting Data
@@ -125,12 +125,13 @@ If you've manually loaded data or want to skip upstream assets:
 Open an interactive DuckDB session with local and remote DuckLake attached:
 
 ```bash
-# Local DuckLake (with remote also attached as read-only)
-./dev db
-
-# Remote DuckLake only
-./dev db-remote
+uv run dev db
 ```
+
+Requires DuckDB CLI to be installed separately:
+- macOS: `brew install duckdb`
+- Windows: `winget install DuckDB.cli`
+- Linux: https://duckdb.org/docs/installation/
 
 Inside the session:
 
@@ -157,16 +158,16 @@ Export tables to local files:
 
 ```bash
 # Export local table as parquet (default)
-./dev export customers
+uv run dev export customers
 
 # Export as CSV
-./dev export customers csv
+uv run dev export customers csv
 
 # Export remote table as parquet
-./dev export customers parquet remote
+uv run dev export customers parquet remote
 
 # Export remote table as JSON
-./dev export customers json remote
+uv run dev export customers json remote
 ```
 
 Supported formats: `parquet` (default), `csv`, `json`, `ndjson`
@@ -291,7 +292,7 @@ Defined in `docker-compose.base.yaml`:
 
 ```
 sywi_data_plattform/
-├── dev                       # Development helper script
+├── dev.py                    # Development CLI (use: uv run dev)
 ├── deploy.sh                 # Production deployment script
 ├── watchdog.sh               # Auto-deploy on git changes
 ├── generate_platform.py      # Generates Docker Compose config
@@ -329,7 +330,7 @@ sywi_data_plattform/
 Creating a new pipeline is a single command:
 
 ```bash
-./dev new my_pipeline
+uv run dev new my_pipeline
 ```
 
 This will:
@@ -342,7 +343,7 @@ Then:
 2. Export them in `pipelines/my_pipeline/assets/__init__.py`
 3. Import and register them in `pipelines/my_pipeline/defs.py`
 4. Add any dependencies to `pipelines/my_pipeline/pyproject.toml`
-5. Run `./dev up` - configs are auto-generated
+5. Run `uv run dev up` - configs are auto-generated
 
 ### Example Asset
 
@@ -405,22 +406,21 @@ defs = Definitions(
 
 Dagster handles cross-location scheduling automatically.
 
-## dev Reference
+## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `./dev up` | Start Dagster dev environment (Docker) |
-| `./dev down` | Stop all containers |
-| `./dev new <name>` | Create a new pipeline from template |
-| `./dev build` | Rebuild base Docker image |
-| `./dev logs [service]` | View logs (optionally for specific service) |
-| `./dev db` | Open interactive DuckDB session (local + remote) |
-| `./dev db-remote` | Open interactive DuckDB session (remote only) |
-| `./dev export <table> [format] [source]` | Export table to file (format: parquet/csv/json/ndjson, source: local/remote) |
-| `./dev pull` | List remote tables |
-| `./dev pull <table>` | Pull table from remote to local DuckLake |
-| `./dev pull <table> <limit>` | Pull limited rows from remote |
-| `./dev mark <assets>` | Mark assets as materialized (comma-separated) |
+| `uv run dev up` | Start Dagster dev environment (Docker) |
+| `uv run dev down` | Stop all containers |
+| `uv run dev new <name>` | Create a new pipeline from template |
+| `uv run dev build` | Rebuild base Docker image |
+| `uv run dev logs [service]` | View logs (optionally for specific service) |
+| `uv run dev db` | Open interactive DuckDB session (local + remote) |
+| `uv run dev export <table> [format] [source]` | Export table to file (format: parquet/csv/json/ndjson, source: local/remote) |
+| `uv run dev pull` | List remote tables |
+| `uv run dev pull <table>` | Pull table from remote to local DuckLake |
+| `uv run dev pull <table> <limit>` | Pull limited rows from remote |
+| `uv run dev mark <assets>` | Mark assets as materialized (comma-separated) |
 
 ## Client Packages
 
@@ -463,6 +463,12 @@ See [packages/sywi.duckdb/README.md](packages/sywi.duckdb/README.md) for details
 ## Dependencies
 
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) (Python package manager) - for `pull`/`mark` commands
+- [uv](https://github.com/astral-sh/uv) - Python package manager
+  - macOS: `brew install uv`
+  - Windows: `winget install astral-sh.uv`
+  - Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - Docker and Docker Compose
-- DuckDB 1.3.0+ (installed automatically via uv)
+- DuckDB CLI (for `uv run dev db` command)
+  - macOS: `brew install duckdb`
+  - Windows: `winget install DuckDB.cli`
+  - Linux: https://duckdb.org/docs/installation/
