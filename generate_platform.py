@@ -28,7 +28,10 @@ compose_dev = {
                 "POSTGRES_PASSWORD": "dagster_password",
                 "POSTGRES_DB": "dagster_db",
             },
-            "volumes": ["dagster_pgdata_dev:/var/lib/postgresql/data"],
+            "volumes": [
+                "dagster_pgdata_dev:/var/lib/postgresql/data",
+                "./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro",
+            ],
             "networks": ["dagster_network"],
             "ports": ["5432:5432"],
         },

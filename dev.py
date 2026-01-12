@@ -77,21 +77,43 @@ def require_env(name: str) -> str:
     return value
 
 
+def _dsn_for_host(dsn: str) -> str:
+    """Convert Docker hostname to localhost for CLI usage outside containers."""
+    return dsn.replace("host=postgresql", "host=localhost")
+
+
+def _is_postgres_dsn(dsn: str) -> bool:
+    """Check if DSN is for Postgres mode (vs local file mode)."""
+    return "host=" in dsn
+
+
 def build_duckdb_init_sql(
     include_remote: bool = False, remote_only: bool = False
 ) -> str:
     """Build DuckDB initialization SQL for local and/or remote DuckLake."""
+    # Get local config to determine if we need postgres extension
+    local_catalog_dsn = _dsn_for_host(get_env("DUCKLAKE_CATALOG_DSN") or "")
+    local_is_postgres = _is_postgres_dsn(local_catalog_dsn)
+
     lines = [
         "INSTALL ducklake;",
         "LOAD ducklake;",
     ]
 
-    if include_remote or remote_only:
+    # Load postgres extension if needed (for local or remote)
+    if local_is_postgres or include_remote or remote_only:
         lines.extend(
             [
                 "INSTALL postgres;",
-                "INSTALL httpfs;",
                 "LOAD postgres;",
+            ]
+        )
+
+    # Load httpfs and S3 config for remote
+    if include_remote or remote_only:
+        lines.extend(
+            [
+                "INSTALL httpfs;",
                 "LOAD httpfs;",
                 "",
                 f"SET s3_region = '{get_env('DUCKLAKE_REMOTE_S3_REGION', 'us-east-1')}';",
@@ -105,11 +127,16 @@ def build_duckdb_init_sql(
         )
 
     if not remote_only:
-        catalog_dsn = get_env("DUCKLAKE_CATALOG_DSN", "")
         data_path = get_env("DUCKLAKE_DATA_PATH", "")
-        lines.append(
-            f"ATTACH 'ducklake:{catalog_dsn}' AS local (DATA_PATH '{data_path}');"
-        )
+        schema = get_env("DUCKLAKE_SCHEMA", "local")
+        if local_is_postgres:
+            lines.append(
+                f"ATTACH 'ducklake:postgres:{local_catalog_dsn}' AS {schema} (DATA_PATH '{data_path}');"
+            )
+        else:
+            lines.append(
+                f"ATTACH 'ducklake:{local_catalog_dsn}' AS {schema} (DATA_PATH '{data_path}');"
+            )
 
     if include_remote or remote_only:
         remote_catalog_dsn = get_env("DUCKLAKE_REMOTE_CATALOG_DSN", "")
@@ -121,10 +148,11 @@ def build_duckdb_init_sql(
         )
 
     # Set default database
+    schema = get_env("DUCKLAKE_SCHEMA", "local")
     if remote_only:
         lines.append("USE remote;")
     else:
-        lines.append("USE local;")
+        lines.append(f"USE {schema};")
 
     return "\n".join(lines)
 
@@ -318,13 +346,14 @@ def export_table(
     ext, format_opts = format_map[format]
     output_file = f"{table}.{ext}"
 
+    schema = get_env("DUCKLAKE_SCHEMA") or "local"
     if source == "remote":
         require_env("DUCKLAKE_REMOTE_CATALOG_DSN")
         init_sql = build_duckdb_init_sql(remote_only=True)
         source_table = f"remote.{table}"
     else:
         init_sql = build_duckdb_init_sql()
-        source_table = f"local.{table}"
+        source_table = f"{schema}.{table}"
 
     copy_sql = f"COPY (SELECT * FROM {source_table}) TO '{output_file}' ({format_opts})"
     count_sql = f"SELECT COUNT(*) FROM {source_table}"
@@ -354,6 +383,7 @@ def pull(
     conn = duckdb.connect()
     conn.execute(init_sql)
 
+    schema = get_env("DUCKLAKE_SCHEMA") or "local"
     if table is None:
         # List tables
         console.print("Remote tables:")
@@ -362,15 +392,17 @@ def pull(
             console.print(row[0])
     else:
         # Pull table
-        conn.execute(f"DROP TABLE IF EXISTS local.{table}")
+        conn.execute(f"DROP TABLE IF EXISTS {schema}.{table}")
         if limit:
             conn.execute(
-                f"CREATE TABLE local.{table} AS SELECT * FROM remote.{table} LIMIT {limit}"
+                f"CREATE TABLE {schema}.{table} AS SELECT * FROM remote.{table} LIMIT {limit}"
             )
         else:
-            conn.execute(f"CREATE TABLE local.{table} AS SELECT * FROM remote.{table}")
+            conn.execute(
+                f"CREATE TABLE {schema}.{table} AS SELECT * FROM remote.{table}"
+            )
 
-        result = conn.execute(f"SELECT COUNT(*) FROM local.{table}").fetchone()
+        result = conn.execute(f"SELECT COUNT(*) FROM {schema}.{table}").fetchone()
         row_count = result[0] if result else 0
         console.print(f"{table}: {row_count} rows pulled")
 
