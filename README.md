@@ -128,6 +128,8 @@ Open an interactive DuckDB session with local and remote DuckLake attached:
 uv run dev db
 ```
 
+**Note:** The dev environment (`uv run dev up`) must be running for local database access. Commands like `dev db`, `dev pull`, and `dev export` require PostgreSQL to be running for the DuckLake catalog.
+
 Requires DuckDB CLI to be installed separately:
 - macOS: `brew install duckdb`
 - Windows: `winget install DuckDB.cli`
@@ -459,6 +461,26 @@ dbDisconnect(con)
 ```
 
 See [packages/sywi.duckdb/README.md](packages/sywi.duckdb/README.md) for details.
+
+## Troubleshooting
+
+### `uv run dev` command fails
+
+Make sure Docker is running. The dev environment uses Docker Compose to run all services.
+
+```bash
+# Check if Docker is running
+docker info
+```
+
+### `dev db`, `dev pull`, or `dev export` fails to connect
+
+The dev environment must be running for local database access. These commands require PostgreSQL (for the DuckLake catalog) to be available.
+
+```bash
+# Start the dev environment first
+uv run dev up
+```
 
 ## Dependencies
 
