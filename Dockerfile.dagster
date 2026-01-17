@@ -1,0 +1,14 @@
+# Dagster webserver and daemon image for production
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+WORKDIR /opt/dagster/app
+
+# Install Dagster components
+RUN uv pip install --system \
+    dagster \
+    dagster-webserver \
+    dagster-postgres
+
+# Create dagster home directory
+ENV DAGSTER_HOME=/opt/dagster/dagster_home
+RUN mkdir -p /opt/dagster/dagster_home

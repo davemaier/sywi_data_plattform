@@ -1,0 +1,22 @@
+# Local development: PostgreSQL only
+# Dagster runs natively with `dagster dev`
+services:
+  postgresql:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dagster_user
+      POSTGRES_PASSWORD: dagster_password
+      POSTGRES_DB: dagster_db
+    volumes:
+      - dagster_pgdata:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dagster_user -d dagster_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  dagster_pgdata:

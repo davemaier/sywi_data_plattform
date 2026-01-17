@@ -3,9 +3,7 @@
 
 Usage:
     uv run dev <command> [options]
-
-On Unix, you can also use:
-    ./dev <command> [options]
+    just <command>
 """
 
 import os
@@ -13,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -24,7 +23,7 @@ from rich.console import Console
 # Setup paths and load environment
 SCRIPT_DIR = Path(__file__).parent.resolve()
 ENV_FILE = SCRIPT_DIR / ".env.local"
-DEV_COMPOSE = "docker-compose.dev.generated.yaml"
+PROD_COMPOSE = "docker-compose.prod.yaml"
 
 # Load .env.local if it exists
 if ENV_FILE.exists():
@@ -59,8 +58,13 @@ def run(
 
 
 def docker_compose(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    """Run a docker compose command with the dev compose file."""
-    return run(["docker", "compose", "-f", DEV_COMPOSE, *args], check=check)
+    """Run a docker compose command."""
+    return run(["docker", "compose", *args], check=check)
+
+
+def docker_compose_prod(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+    """Run a docker compose command with production compose file."""
+    return run(["docker", "compose", "-f", PROD_COMPOSE, *args], check=check)
 
 
 def require_env(name: str) -> str:
@@ -77,39 +81,77 @@ def _dsn_for_host(dsn: str) -> str:
     return dsn.replace("host=postgresql", "host=localhost")
 
 
-def build_duckdb_init_sql(default_schema: str = "local") -> str:
-    """Build DuckDB initialization SQL with local and remote DuckLake attached."""
+def _wait_for_postgres(max_attempts: int = 30) -> bool:
+    """Wait for PostgreSQL to be ready."""
+    import socket
+
+    for attempt in range(max_attempts):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(("localhost", 5432))
+            sock.close()
+            if result == 0:
+                return True
+        except Exception:
+            pass
+        time.sleep(1)
+        if attempt % 5 == 0:
+            console.print(f"Waiting for PostgreSQL... ({attempt}/{max_attempts})")
+    return False
+
+
+def build_duckdb_init_sql(
+    default_schema: str = "local", include_remote: bool = True
+) -> str:
+    """Build DuckDB initialization SQL with local and optionally remote DuckLake attached."""
     local_catalog_dsn = _dsn_for_host(os.environ.get("DUCKLAKE_CATALOG_DSN") or "")
     local_data_path = os.environ.get("DUCKLAKE_DATA_PATH", "")
     local_schema = os.environ.get("DUCKLAKE_SCHEMA", "local")
 
-    remote_catalog_dsn = os.environ.get("DUCKLAKE_REMOTE_CATALOG_DSN", "")
-    remote_data_path = os.environ.get("DUCKLAKE_REMOTE_DATA_PATH", "")
-
     lines = [
         "INSTALL ducklake; LOAD ducklake;",
         "INSTALL postgres; LOAD postgres;",
-        "INSTALL httpfs; LOAD httpfs;",
-        "",
-        f"SET s3_region = '{os.environ.get('DUCKLAKE_REMOTE_S3_REGION', 'us-east-1')}';",
-        f"SET s3_endpoint = '{os.environ.get('DUCKLAKE_REMOTE_S3_ENDPOINT', '')}';",
-        f"SET s3_url_style = '{os.environ.get('DUCKLAKE_REMOTE_S3_URL_STYLE', 'path')}';",
-        f"SET s3_access_key_id = '{os.environ.get('DUCKLAKE_REMOTE_S3_ACCESS_KEY_ID', '')}';",
-        f"SET s3_secret_access_key = '{os.environ.get('DUCKLAKE_REMOTE_S3_SECRET_ACCESS_KEY', '')}';",
-        f"SET s3_use_ssl = {os.environ.get('DUCKLAKE_REMOTE_S3_USE_SSL', 'false')};",
-        "",
-        f"ATTACH 'ducklake:postgres:{local_catalog_dsn}' AS {local_schema} (DATA_PATH '{local_data_path}');",
-        f"ATTACH 'ducklake:postgres:{remote_catalog_dsn}' AS remote (DATA_PATH '{remote_data_path}', READ_ONLY);",
-        "",
-        f"USE {default_schema};",
     ]
+
+    lines.extend(
+        [
+            "",
+            f"ATTACH 'ducklake:postgres:{local_catalog_dsn}' AS {local_schema} (DATA_PATH '{local_data_path}');",
+        ]
+    )
+
+    if include_remote:
+        remote_catalog_dsn = os.environ.get("DUCKLAKE_REMOTE_CATALOG_DSN", "")
+        remote_data_path = os.environ.get("DUCKLAKE_REMOTE_DATA_PATH", "")
+
+        lines.extend(
+            [
+                "INSTALL httpfs; LOAD httpfs;",
+                "",
+                f"SET s3_region = '{os.environ.get('DUCKLAKE_REMOTE_S3_REGION', 'us-east-1')}';",
+                f"SET s3_endpoint = '{os.environ.get('DUCKLAKE_REMOTE_S3_ENDPOINT', '')}';",
+                f"SET s3_url_style = '{os.environ.get('DUCKLAKE_REMOTE_S3_URL_STYLE', 'path')}';",
+                f"SET s3_access_key_id = '{os.environ.get('DUCKLAKE_REMOTE_S3_ACCESS_KEY_ID', '')}';",
+                f"SET s3_secret_access_key = '{os.environ.get('DUCKLAKE_REMOTE_S3_SECRET_ACCESS_KEY', '')}';",
+                f"SET s3_use_ssl = {os.environ.get('DUCKLAKE_REMOTE_S3_USE_SSL', 'false')};",
+                f"ATTACH 'ducklake:postgres:{remote_catalog_dsn}' AS remote (DATA_PATH '{remote_data_path}', READ_ONLY);",
+            ]
+        )
+
+    lines.extend(
+        [
+            "",
+            f"USE {default_schema};",
+        ]
+    )
 
     return "\n".join(lines)
 
 
 @app.command()
 def up():
-    """Start Dagster dev environment (Docker)."""
+    """Start Dagster dev environment (native Python, PostgreSQL in Docker)."""
     # Ensure data directory exists
     (SCRIPT_DIR / "data").mkdir(parents=True, exist_ok=True)
 
@@ -121,46 +163,57 @@ def up():
         )
         raise typer.Exit(1)
 
-    # Build base image if needed
-    result = run(
-        ["docker", "image", "inspect", "my-platform-base:latest"],
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        console.print("Building base image...")
-        run(
-            [
-                "docker",
-                "build",
-                "-t",
-                "my-platform-base:latest",
-                "-f",
-                "Dockerfile.base",
-                ".",
-            ]
-        )
+    # Start PostgreSQL
+    console.print("Starting PostgreSQL...")
+    docker_compose("up", "-d", "postgresql")
 
-    # Generate configs
-    console.print("Generating configs...")
-    run(["uv", "run", "python", "generate_platform.py"])
+    # Wait for PostgreSQL to be ready
+    if not _wait_for_postgres():
+        err_console.print("[red]Error:[/red] PostgreSQL failed to start")
+        raise typer.Exit(1)
+
+    console.print("[green]PostgreSQL is ready![/green]")
 
     console.print()
-    console.print("Starting Dagster dev environment...")
+    console.print("Starting Dagster dev server (via dg)...")
     console.print(
         "Open [link=http://localhost:3000]http://localhost:3000[/link] in your browser"
     )
     console.print()
-    console.print("Hot reload: Edit code, then click 'Reload' in the Dagster UI")
-    console.print()
 
-    docker_compose("up")
+    # Run dg dev which handles multi-code-location isolation via dg.toml
+    os.execvp("dg", ["dg", "dev"])
 
 
 @app.command()
 def down():
-    """Stop all containers."""
+    """Stop PostgreSQL container."""
     docker_compose("down")
+
+
+@app.command()
+def prod():
+    """Start production-like environment (full Docker stack)."""
+    # Check for .env.local
+    if not ENV_FILE.exists():
+        err_console.print(
+            "[red]Error:[/red] .env.local not found. "
+            "Copy .env.example to .env.local and configure it."
+        )
+        raise typer.Exit(1)
+
+    # Generate production compose
+    console.print("Generating production config...")
+    run(["uv", "run", "python", "generate_platform.py"])
+
+    console.print()
+    console.print("Starting production environment...")
+    console.print(
+        "Open [link=http://localhost:3000]http://localhost:3000[/link] in your browser"
+    )
+    console.print()
+
+    docker_compose_prod("up", "--build")
 
 
 @app.command()
@@ -178,7 +231,7 @@ def new(
         )
         raise typer.Exit(1)
 
-    dest = SCRIPT_DIR / "pipelines" / name
+    dest = SCRIPT_DIR / name
     if dest.exists():
         err_console.print(
             f"[red]Error:[/red] Pipeline '{name}' already exists at {dest}"
@@ -188,52 +241,53 @@ def new(
     console.print(f"Creating new pipeline: [bold]{name}[/bold]")
 
     # Copy template
-    template_dir = SCRIPT_DIR / "pipelines" / "_template"
+    template_dir = SCRIPT_DIR / "_template"
+    if not template_dir.exists():
+        err_console.print(
+            f"[red]Error:[/red] Template directory not found at {template_dir}"
+        )
+        raise typer.Exit(1)
+
     shutil.copytree(template_dir, dest)
 
-    # Update Dockerfile
-    dockerfile = dest / "Dockerfile"
-    content = dockerfile.read_text()
-    content = content.replace("my_pipeline", name)
-    dockerfile.write_text(content)
+    # Replace placeholders in all files
+    for file_path in dest.rglob("*"):
+        if file_path.is_file():
+            try:
+                content = file_path.read_text()
+                # Replace __name__ placeholder
+                content = content.replace("__name__", name)
+                content = content.replace("__NAME__", name.upper())
+                file_path.write_text(content)
+            except UnicodeDecodeError:
+                # Skip binary files
+                pass
 
-    # Update pyproject.toml
-    pyproject = dest / "pyproject.toml"
-    content = pyproject.read_text()
-    content = content.replace("my-pipeline", f"{name}-pipeline")
-    pyproject.write_text(content)
+    # Rename src/__name__ directory if it exists
+    name_dir = dest / "src" / "__name__"
+    if name_dir.exists():
+        name_dir.rename(dest / "src" / name)
 
-    # Update defs.py
-    defs_file = dest / "defs.py"
-    content = defs_file.read_text()
-    content = content.replace("my_pipeline", name)
-    defs_file.write_text(content)
+    # Generate lock file
+    console.print("Generating lock file...")
+    run(["uv", "lock"], cwd=dest)
+
+    # Add to dg.toml
+    dg_toml = SCRIPT_DIR / "dg.toml"
+    if dg_toml.exists():
+        content = dg_toml.read_text()
+        if f'path = "{name}"' not in content:
+            content += f'\n[[workspace.projects]]\npath = "{name}"\n'
+            dg_toml.write_text(content)
 
     console.print()
     console.print(f"[green]Pipeline '{name}' created at {dest}[/green]")
     console.print()
     console.print("Next steps:")
-    console.print(f"  1. Add your assets in {dest}/assets/")
-    console.print(f"  2. Update {dest}/defs.py to import and register your assets")
+    console.print(f"  1. Add your assets in {dest}/src/{name}/assets/")
+    console.print(f"  2. Update {dest}/src/{name}/definitions.py")
     console.print(f"  3. Add any dependencies to {dest}/pyproject.toml")
-    console.print("  4. Run [bold]./dev up[/bold] to start the dev environment")
-
-
-@app.command()
-def build():
-    """Rebuild base Docker image."""
-    console.print("Rebuilding base image...")
-    run(
-        [
-            "docker",
-            "build",
-            "-t",
-            "my-platform-base:latest",
-            "-f",
-            "Dockerfile.base",
-            ".",
-        ]
-    )
+    console.print("  4. Run [bold]just dev[/bold] to start the dev environment")
 
 
 @app.command()
@@ -250,7 +304,11 @@ def logs(
 
 
 @app.command()
-def db():
+def db(
+    local_only: bool = typer.Option(
+        False, "--local-only", "-l", help="Only attach local database (skip remote)"
+    ),
+):
     """Open interactive DuckDB session (local + remote attached).
 
     Requires DuckDB CLI to be installed separately:
@@ -267,7 +325,7 @@ def db():
         err_console.print("  Linux:   https://duckdb.org/docs/installation/")
         raise typer.Exit(1)
 
-    sql = build_duckdb_init_sql()
+    sql = build_duckdb_init_sql(include_remote=not local_only)
     run(["duckdb", "-cmd", sql])
 
 
@@ -353,35 +411,8 @@ def pull(
         row_count = result[0] if result else 0
         console.print(f"{table}: {row_count} rows pulled")
 
-        # Mark asset as materialized in Dagster
-        mark_script = f"""
-from dagster import DagsterInstance, AssetKey, AssetMaterialization
-
-instance = DagsterInstance.get()
-asset_name = '{table}'
-key = AssetKey(asset_name)
-
-try:
-    instance.report_runless_asset_event(
-        AssetMaterialization(
-            asset_key=key,
-            description='Pulled from remote DuckLake',
-            metadata={{'source': 'dev pull'}}
-        )
-    )
-    print(f'Marked {{asset_name}} as materialized')
-except Exception as e:
-    pass
-"""
-        docker_compose(
-            "exec",
-            "-T",
-            "dagster_webserver",
-            "python",
-            "-c",
-            mark_script,
-            check=False,
-        )
+        # Mark asset as materialized in native Dagster instance
+        _mark_asset_materialized(table, "Pulled from remote DuckLake")
 
 
 @app.command()
@@ -391,26 +422,29 @@ def mark(
     ),
 ):
     """Mark assets as materialized without running them."""
-    mark_script = f"""
-from dagster import DagsterInstance, AssetKey, AssetMaterialization
+    for asset_name in assets.split(","):
+        asset_name = asset_name.strip()
+        _mark_asset_materialized(asset_name, "Manually marked as materialized")
 
-instance = DagsterInstance.get()
 
-assets = '{assets}'.split(',')
-for asset_name in assets:
-    asset_name = asset_name.strip()
-    key = AssetKey(asset_name)
+def _mark_asset_materialized(asset_name: str, description: str) -> None:
+    """Mark an asset as materialized in the native Dagster instance."""
+    try:
+        from dagster import DagsterInstance, AssetKey, AssetMaterialization
 
-    instance.report_runless_asset_event(
-        AssetMaterialization(
-            asset_key=key,
-            description='Manually marked as materialized',
-            metadata={{'source': 'dev mark'}}
+        instance = DagsterInstance.get()
+        key = AssetKey(asset_name)
+
+        instance.report_runless_asset_event(
+            AssetMaterialization(
+                asset_key=key,
+                description=description,
+                metadata={"source": "dev cli"},
+            )
         )
-    )
-    print(f'Marked {{asset_name}} as materialized')
-"""
-    docker_compose("exec", "dagster_webserver", "python", "-c", mark_script)
+        console.print(f"Marked {asset_name} as materialized")
+    except Exception as e:
+        err_console.print(f"[yellow]Warning:[/yellow] Could not mark {asset_name}: {e}")
 
 
 def main():
