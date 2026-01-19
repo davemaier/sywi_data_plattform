@@ -9,6 +9,7 @@ Usage:
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -55,6 +56,47 @@ def run(
         text=True,
         cwd=cwd or SCRIPT_DIR,
     )
+
+
+def run_foreground(cmd: list[str], cwd: Optional[Path] = None) -> int:
+    """Run a command in foreground with proper cross-platform signal handling.
+
+    This replaces os.execvp() which doesn't work correctly on Windows.
+    Properly forwards Ctrl+C and handles cleanup.
+    """
+    # On Windows, we need special handling for console processes
+    kwargs: dict = {"cwd": cwd or SCRIPT_DIR}
+    if sys.platform == "win32":
+        # CREATE_NEW_PROCESS_GROUP allows the child to receive Ctrl+C
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+
+    proc = subprocess.Popen(cmd, **kwargs)
+
+    def signal_handler(sig: int, frame) -> None:
+        """Forward signal to child process and exit."""
+        if proc.poll() is None:  # Process still running
+            if sys.platform == "win32":
+                # On Windows, send CTRL_BREAK_EVENT to the process group
+                proc.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                proc.terminate()
+        proc.wait()
+        sys.exit(128 + sig)
+
+    # Set up signal handlers
+    original_sigint = signal.signal(signal.SIGINT, signal_handler)
+    original_sigterm = signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        return proc.wait()
+    finally:
+        # Restore original handlers
+        signal.signal(signal.SIGINT, original_sigint)
+        signal.signal(signal.SIGTERM, original_sigterm)
+        # Ensure process is terminated
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait()
 
 
 def docker_compose(*args: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -341,10 +383,10 @@ def up():
     # Create temp dg.toml with only enabled projects and run dg dev from there
     if len(enabled_projects) < len(all_projects):
         temp_dir = _create_temp_dg_toml(enabled_projects)
-        os.execvp("dg", ["dg", "dev", "--target-path", str(temp_dir)])
+        raise typer.Exit(run_foreground(["dg", "dev", "--target-path", str(temp_dir)]))
     else:
         # All projects enabled, use normal dg.toml
-        os.execvp("dg", ["dg", "dev"])
+        raise typer.Exit(run_foreground(["dg", "dev"]))
 
 
 @app.command()
@@ -377,7 +419,9 @@ def prod():
     )
     console.print()
 
-    docker_compose_prod("up", "--build")
+    raise typer.Exit(
+        run_foreground(["docker", "compose", "-f", PROD_COMPOSE, "up", "--build"])
+    )
 
 
 @app.command()
@@ -461,10 +505,10 @@ def logs(
     ),
 ):
     """View logs (optionally for specific service)."""
+    cmd = ["docker", "compose", "logs", "-f"]
     if service:
-        docker_compose("logs", "-f", service)
-    else:
-        docker_compose("logs", "-f")
+        cmd.append(service)
+    raise typer.Exit(run_foreground(cmd))
 
 
 @app.command()
@@ -490,7 +534,7 @@ def db(
         raise typer.Exit(1)
 
     sql = build_duckdb_init_sql(include_remote=not local_only)
-    run(["duckdb", "-cmd", sql])
+    raise typer.Exit(run_foreground(["duckdb", "-cmd", sql]))
 
 
 @app.command("export")
