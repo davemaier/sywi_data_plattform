@@ -322,18 +322,21 @@ def up():
     dagster_home.mkdir(parents=True, exist_ok=True)
     os.environ["DAGSTER_HOME"] = str(dagster_home)
 
-    # Create a minimal dagster.yaml for dev (SQLite + DefaultRunCoordinator)
-    # This avoids SQLite locking issues that occur with QueuedRunCoordinator
+    # Create dagster.yaml for dev using PostgreSQL storage (avoids SQLite locking issues)
     dagster_yaml = dagster_home / "dagster.yaml"
-    if not dagster_yaml.exists():
-        dagster_yaml.write_text(
-            "run_coordinator:\n"
-            "  module: dagster.core.run_coordinator\n"
-            "  class: DefaultRunCoordinator\n"
-            "\n"
-            "telemetry:\n"
-            "  enabled: false\n"
-        )
+    dagster_yaml.write_text(
+        "storage:\n"
+        "  postgres:\n"
+        "    postgres_db:\n"
+        "      username: dagster_user\n"
+        "      password: dagster_password\n"
+        "      hostname: localhost\n"
+        "      db_name: dagster_db\n"
+        "      port: 5432\n"
+        "\n"
+        "telemetry:\n"
+        "  enabled: false\n"
+    )
 
     # Create temp dg.toml with only enabled projects and run dg dev from there
     if len(enabled_projects) < len(all_projects):
