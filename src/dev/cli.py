@@ -179,7 +179,9 @@ def _sync_subprojects(projects: list[dict] | None = None) -> None:
             if project_dir.exists():
                 console.print(f"  Syncing [bold]{path}[/bold]...")
                 try:
-                    run(["uv", "sync"], cwd=project_dir)
+                    env = os.environ.copy()
+                    env.pop("VIRTUAL_ENV", None)
+                    subprocess.run(["uv", "sync"], check=True, cwd=project_dir, env=env)
                 except subprocess.CalledProcessError as e:
                     err_console.print(f"[red]Error:[/red] Failed to sync {path}")
                     raise typer.Exit(1) from e
