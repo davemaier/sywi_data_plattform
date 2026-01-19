@@ -1,1 +1,1 @@
-"""HackerNews data pipeline for SYWI platform."""
+"""HackerNews data project for SYWI platform."""

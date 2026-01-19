@@ -1,1 +1,1 @@
-"""__NAME__ data pipeline for SYWI platform."""
+"""__NAME__ data project for SYWI platform."""

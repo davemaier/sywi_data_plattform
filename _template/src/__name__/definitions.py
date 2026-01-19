@@ -1,4 +1,4 @@
-"""__NAME__ pipeline definitions - self-contained Dagster definitions."""
+"""__NAME__ project definitions - self-contained Dagster definitions."""
 
 import os
 

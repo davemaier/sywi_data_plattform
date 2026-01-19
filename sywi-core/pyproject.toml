@@ -12,8 +12,5 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["sywi_core"]
+requires = ["uv_build>=0.9.4,<0.10.0"]
+build-backend = "uv_build"

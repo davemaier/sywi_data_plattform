@@ -1,1 +1,1 @@
-"""Patents data pipeline for SYWI platform."""
+"""Patents data project for SYWI platform."""

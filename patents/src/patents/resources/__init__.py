@@ -1,4 +1,4 @@
-"""Resources for the patents pipeline."""
+"""Resources for the patents project."""
 
 from .falkordb_resource import FalkorDBResource
 from .neo4j_resource import Neo4jResource

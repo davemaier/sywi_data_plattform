@@ -38,6 +38,7 @@ def hackernews_top_stories_ids(context: AssetExecutionContext) -> pd.DataFrame:
         "https://hacker-news.firebaseio.com/v0/topstories.json"
     ).json()[:5]
 
+    context.log.info(f"Test")
     context.log.info(f"Fetched {len(top_story_ids)} story IDs: {top_story_ids}")
 
     # Convert to DataFrame for DuckLake storage

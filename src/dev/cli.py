@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-platform development CLI for Dagster pipelines.
+"""Cross-platform development CLI for Dagster projects.
 
 Usage:
     uv run dev <command> [options]
@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 # Setup paths and load environment
-SCRIPT_DIR = Path(__file__).parent.resolve()
+SCRIPT_DIR = Path(__file__).parent.parent.parent.resolve()
 ENV_FILE = SCRIPT_DIR / ".env.local"
 PROD_COMPOSE = "docker-compose.prod.yaml"
 
@@ -35,7 +35,7 @@ err_console = Console(stderr=True)
 
 # Typer app
 app = typer.Typer(
-    help="Local development CLI for Dagster pipelines.",
+    help="Local development CLI for Dagster projects.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -101,6 +101,38 @@ def _wait_for_postgres(max_attempts: int = 30) -> bool:
     return False
 
 
+def _sync_subprojects() -> None:
+    """Sync all subprojects defined in dg.toml."""
+    import tomllib
+
+    dg_toml = SCRIPT_DIR / "dg.toml"
+    if not dg_toml.exists():
+        return
+
+    with open(dg_toml, "rb") as f:
+        config = tomllib.load(f)
+
+    projects = config.get("workspace", {}).get("projects", [])
+
+    if not projects:
+        return
+
+    console.print("Syncing subprojects...")
+    for project in projects:
+        path = project.get("path")
+        if path:
+            project_dir = SCRIPT_DIR / path
+            if project_dir.exists():
+                console.print(f"  Syncing [bold]{path}[/bold]...")
+                try:
+                    run(["uv", "sync"], cwd=project_dir)
+                except subprocess.CalledProcessError as e:
+                    err_console.print(f"[red]Error:[/red] Failed to sync {path}")
+                    raise typer.Exit(1) from e
+    console.print("[green]All subprojects synced![/green]")
+    console.print()
+
+
 def build_duckdb_init_sql(
     default_schema: str = "local", include_remote: bool = True
 ) -> str:
@@ -163,6 +195,9 @@ def up():
         )
         raise typer.Exit(1)
 
+    # Sync all subprojects (creates venvs if needed)
+    _sync_subprojects()
+
     # Start PostgreSQL
     console.print("Starting PostgreSQL...")
     docker_compose("up", "-d", "postgresql")
@@ -219,14 +254,14 @@ def prod():
 @app.command()
 def new(
     name: str = typer.Argument(
-        ..., help="Name for the new pipeline (lowercase, underscores)"
+        ..., help="Name for the new project (lowercase, underscores)"
     ),
 ):
-    """Create a new pipeline from template."""
+    """Create a new project (Dagster code location) from template."""
     # Validate name
     if not re.match(r"^[a-z][a-z0-9_]*$", name):
         err_console.print(
-            "[red]Error:[/red] Pipeline name must be lowercase, start with a letter, "
+            "[red]Error:[/red] Project name must be lowercase, start with a letter, "
             "and contain only letters, numbers, and underscores."
         )
         raise typer.Exit(1)
@@ -234,11 +269,11 @@ def new(
     dest = SCRIPT_DIR / name
     if dest.exists():
         err_console.print(
-            f"[red]Error:[/red] Pipeline '{name}' already exists at {dest}"
+            f"[red]Error:[/red] Project '{name}' already exists at {dest}"
         )
         raise typer.Exit(1)
 
-    console.print(f"Creating new pipeline: [bold]{name}[/bold]")
+    console.print(f"Creating new project: [bold]{name}[/bold]")
 
     # Copy template
     template_dir = SCRIPT_DIR / "_template"
@@ -281,7 +316,7 @@ def new(
             dg_toml.write_text(content)
 
     console.print()
-    console.print(f"[green]Pipeline '{name}' created at {dest}[/green]")
+    console.print(f"[green]Project '{name}' created at {dest}[/green]")
     console.print()
     console.print("Next steps:")
     console.print(f"  1. Add your assets in {dest}/src/{name}/assets/")
@@ -451,7 +486,3 @@ def main():
     """Entry point for the CLI."""
     os.chdir(SCRIPT_DIR)
     app()
-
-
-if __name__ == "__main__":
-    main()

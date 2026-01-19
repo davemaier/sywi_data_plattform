@@ -1,4 +1,4 @@
-"""Patents pipeline definitions - ingestion, extraction, and knowledge graph."""
+"""Patents project definitions - ingestion, extraction, and knowledge graph assets."""
 
 import os
 

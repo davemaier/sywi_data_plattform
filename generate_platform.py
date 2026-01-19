@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate Docker Compose for production deployment.
 
-This script scans the root directory for pipeline projects and generates:
+This script scans the root directory for Dagster projects and generates:
 - docker-compose.prod.yaml (production deployment with all services)
 - workspace.yaml (Dagster workspace config for production)
 
@@ -11,7 +11,7 @@ For local development, use `dagster dev` with dg.toml instead.
 import os
 import yaml
 
-# Directories to exclude from pipeline discovery
+# Directories to exclude from project discovery
 EXCLUDED_DIRS = {
     "_template",
     "sywi-core",
@@ -29,8 +29,8 @@ COMPOSE_PROD_FILE = "docker-compose.prod.yaml"
 WORKSPACE_FILE = "workspace.yaml"
 
 
-def is_pipeline_dir(path: str) -> bool:
-    """Check if a directory is a pipeline project (has pyproject.toml with [tool.dg])."""
+def is_project_dir(path: str) -> bool:
+    """Check if a directory is a Dagster project (has pyproject.toml and Dockerfile)."""
     pyproject = os.path.join(path, "pyproject.toml")
     if not os.path.exists(pyproject):
         return False
@@ -39,20 +39,20 @@ def is_pipeline_dir(path: str) -> bool:
     return os.path.exists(dockerfile)
 
 
-def discover_pipelines() -> list[str]:
-    """Discover all pipeline projects in the root directory."""
-    pipelines = []
+def discover_projects() -> list[str]:
+    """Discover all Dagster projects in the root directory."""
+    projects = []
     for item in os.listdir("."):
         if item.startswith(".") or item.startswith("_"):
             continue
         if item in EXCLUDED_DIRS:
             continue
-        if os.path.isdir(item) and is_pipeline_dir(item):
-            pipelines.append(item)
-    return sorted(pipelines)
+        if os.path.isdir(item) and is_project_dir(item):
+            projects.append(item)
+    return sorted(projects)
 
 
-def generate_compose(pipelines: list[str]) -> dict:
+def generate_compose(projects: list[str]) -> dict:
     """Generate production Docker Compose configuration."""
     services = {
         "postgresql": {
@@ -119,13 +119,13 @@ def generate_compose(pipelines: list[str]) -> dict:
         },
     }
 
-    # Add pipeline services
-    for pipeline in pipelines:
-        service_name = f"pipeline_{pipeline}"
+    # Add project services
+    for project in projects:
+        service_name = f"project_{project}"
         services[service_name] = {
             "build": {
                 "context": ".",
-                "dockerfile": f"{pipeline}/Dockerfile",
+                "dockerfile": f"{project}/Dockerfile",
             },
             "env_file": ".env",
             "expose": ["4000"],
@@ -137,7 +137,7 @@ def generate_compose(pipelines: list[str]) -> dict:
             },
         }
 
-        # Add pipeline as dependency for daemon and webserver
+        # Add project as dependency for daemon and webserver
         services["dagster_daemon"]["depends_on"][service_name] = {
             "condition": "service_started"
         }
@@ -152,16 +152,16 @@ def generate_compose(pipelines: list[str]) -> dict:
     }
 
 
-def generate_workspace(pipelines: list[str]) -> dict:
+def generate_workspace(projects: list[str]) -> dict:
     """Generate Dagster workspace configuration for production."""
     load_from = []
-    for pipeline in pipelines:
+    for project in projects:
         load_from.append(
             {
                 "grpc_server": {
-                    "host": f"pipeline_{pipeline}",
+                    "host": f"project_{project}",
                     "port": 4000,
-                    "location_name": pipeline,
+                    "location_name": project,
                 }
             }
         )
@@ -169,12 +169,12 @@ def generate_workspace(pipelines: list[str]) -> dict:
 
 
 def main():
-    # Discover pipelines
-    pipelines = discover_pipelines()
-    print(f"Discovered {len(pipelines)} pipeline(s): {', '.join(pipelines)}")
+    # Discover projects
+    projects = discover_projects()
+    print(f"Discovered {len(projects)} project(s): {', '.join(projects)}")
 
     # Generate production compose
-    compose = generate_compose(pipelines)
+    compose = generate_compose(projects)
     with open(COMPOSE_PROD_FILE, "w") as f:
         f.write("# AUTO-GENERATED - DO NOT EDIT\n")
         f.write("# Production Docker Compose configuration\n")
@@ -183,7 +183,7 @@ def main():
     print(f"Generated {COMPOSE_PROD_FILE}")
 
     # Generate workspace config
-    workspace = generate_workspace(pipelines)
+    workspace = generate_workspace(projects)
     with open(WORKSPACE_FILE, "w") as f:
         f.write("# AUTO-GENERATED - DO NOT EDIT\n")
         f.write("# Dagster workspace configuration for production\n\n")

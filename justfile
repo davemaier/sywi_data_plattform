@@ -25,7 +25,7 @@ down:
 db *args:
     uv run dev db {{args}}
 
-# Create a new pipeline
+# Create a new project (Dagster code location)
 new name:
     uv run dev new {{name}}
 

@@ -1,0 +1,113 @@
+# AUTO-GENERATED - DO NOT EDIT
+# Production Docker Compose configuration
+# Usage: docker compose -f docker-compose.prod.yaml up --build
+
+services:
+  postgresql:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dagster_user
+      POSTGRES_PASSWORD: dagster_password
+      POSTGRES_DB: dagster_db
+    volumes:
+    - dagster_pgdata:/var/lib/postgresql/data
+    - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+    - sywi-dagster
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U dagster_user -d dagster_db
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  dagster_daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile.dagster
+    command: dagster-daemon run
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+    env_file: .env
+    volumes:
+    - ./workspace.yaml:/opt/dagster/app/workspace.yaml
+    - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
+    - ./data:/opt/dagster/app/data
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      project_hackernews:
+        condition: service_started
+      project_patents:
+        condition: service_started
+    networks:
+    - sywi-dagster
+    restart: unless-stopped
+  dagster_webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.dagster
+    command: dagster-webserver -h 0.0.0.0 -p 3000 -w workspace.yaml --path-prefix
+      /dagster
+    environment:
+      DAGSTER_HOME: /opt/dagster/dagster_home
+      DAGSTER_UI_PATH_PREFIX: /dagster
+    env_file: .env
+    volumes:
+    - ./workspace.yaml:/opt/dagster/app/workspace.yaml
+    - ./dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
+    - ./data:/opt/dagster/app/data
+    ports:
+    - 3000:3000
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      dagster_daemon:
+        condition: service_started
+      project_hackernews:
+        condition: service_started
+      project_patents:
+        condition: service_started
+    networks:
+    - sywi-dagster
+    restart: unless-stopped
+  project_hackernews:
+    build:
+      context: .
+      dockerfile: hackernews/Dockerfile
+    env_file: .env
+    expose:
+    - '4000'
+    networks:
+    - sywi-dagster
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    depends_on:
+      postgresql:
+        condition: service_healthy
+  project_patents:
+    build:
+      context: .
+      dockerfile: patents/Dockerfile
+    env_file: .env
+    expose:
+    - '4000'
+    networks:
+    - sywi-dagster
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    depends_on:
+      postgresql:
+        condition: service_healthy
+networks:
+  sywi-dagster:
+    name: sywi-dagster
+    driver: bridge
+volumes:
+  dagster_pgdata: null

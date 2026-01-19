@@ -1,4 +1,4 @@
-"""Example asset for __NAME__ pipeline."""
+"""Example asset for __NAME__ project."""
 
 import pandas as pd
 from dagster import asset
@@ -8,7 +8,7 @@ from dagster import asset
 def example_asset() -> pd.DataFrame:
     """An example asset that returns a simple DataFrame.
 
-    Replace this with your actual data pipeline logic.
+    Replace this with your actual data processing logic.
     """
     return pd.DataFrame(
         {

@@ -1,4 +1,4 @@
-"""HackerNews pipeline definitions - self-contained Dagster definitions."""
+"""HackerNews project definitions - Dagster assets and resources."""
 
 import os
 

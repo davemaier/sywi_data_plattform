@@ -1,0 +1,12 @@
+# AUTO-GENERATED - DO NOT EDIT
+# Dagster workspace configuration for production
+
+load_from:
+- grpc_server:
+    host: project_hackernews
+    location_name: hackernews
+    port: 4000
+- grpc_server:
+    host: project_patents
+    location_name: patents
+    port: 4000
