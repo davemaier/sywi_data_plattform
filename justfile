@@ -10,7 +10,7 @@ default:
     @just --list
 
 # Start local development (PostgreSQL + native Dagster)
-dev:
+up:
     uv run dev up
 
 # Start production-like environment (full Docker)

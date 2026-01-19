@@ -31,7 +31,7 @@ cp .env.example .env.local
 # Or place the .env.local you received via email in the root folder
 
 # 3. Start the development environment
-just dev
+just up
 
 # 4. Open http://localhost:3000 in your browser
 ```
@@ -50,7 +50,7 @@ A single project can contain multiple asset groups. For example, the `patents` p
 
 ## Local Development
 
-### What `just dev` Does
+### What `just up` Does
 
 1. **Syncs all projects** - Creates/updates virtual environments for each project
 2. **Starts PostgreSQL** - Runs in Docker (DuckLake catalog)
@@ -173,7 +173,7 @@ Then:
 2. Export them in `assets/__init__.py`
 3. Register them in `definitions.py`
 4. Add dependencies to `pyproject.toml`
-5. Run `just dev` - the new project loads automatically
+5. Run `just up` - the new project loads automatically
 
 ### Example Asset
 
@@ -241,7 +241,7 @@ dbGetQuery(con, "SELECT * FROM local.my_table")
 
 | Command | Description |
 |---------|-------------|
-| `just dev` | Start development environment |
+| `just up` | Start development environment |
 | `just down` | Stop PostgreSQL |
 | `just new <name>` | Create a new project (Dagster code location) |
 | `just db` | Open interactive DuckDB session |
@@ -257,7 +257,7 @@ dbGetQuery(con, "SELECT * FROM local.my_table")
 
 ## Troubleshooting
 
-### `just dev` fails with "No such file or directory: .venv/bin/python"
+### `just up` fails with "No such file or directory: .venv/bin/python"
 
 The subproject virtual environments need to be created. This should happen automatically, but you can manually sync:
 
@@ -271,7 +271,7 @@ cd patents && uv sync && cd ..
 The dev environment must be running (PostgreSQL needs to be up):
 
 ```bash
-just dev  # Start first, then in another terminal:
+just up  # Start first, then in another terminal:
 just db
 ```
 
