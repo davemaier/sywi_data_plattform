@@ -330,6 +330,9 @@ def up():
             "run_coordinator:\n"
             "  module: dagster.core.run_coordinator\n"
             "  class: DefaultRunCoordinator\n"
+            "\n"
+            "telemetry:\n"
+            "  enabled: false\n"
         )
 
     # Create temp dg.toml with only enabled projects and run dg dev from there
