@@ -52,8 +52,8 @@ A single project can contain multiple asset groups. For example, the `patents` p
 
 ### What `just up` Does
 
-1. **Syncs all projects** - Creates/updates virtual environments for each project
-2. **Starts PostgreSQL** - Runs in Docker (DuckLake catalog)
+1. **Syncs enabled projects** - Creates/updates virtual environments
+2. **Starts PostgreSQL** - Runs in Docker (used by both DuckLake and Dagster)
 3. **Runs Dagster** - Starts the dev server via `dg dev`
 
 Each project runs in its own isolated Python environment, allowing different dependency versions without conflicts.
@@ -79,8 +79,10 @@ DUCKLAKE_SCHEMA=local
 
 DuckLake stores:
 
-- **Catalog metadata** in PostgreSQL (shared with Dagster)
+- **Catalog metadata** in PostgreSQL (`ducklake_catalog` database)
 - **Table data** as Parquet files in `./data/`
+
+Dagster stores its run history and metadata in the same PostgreSQL instance (`dagster_db` database).
 
 ### Running Specific Projects
 
