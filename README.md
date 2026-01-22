@@ -30,10 +30,13 @@ cd sywi_data_plattform
 cp .env.example .env.local
 # Or place the .env.local you received via email in the root folder
 
-# 3. Start the development environment
+# 3. Initialize the local DuckDB data directory - only required once
+just db -l
+
+# 4. Start the development environment
 just up
 
-# 4. Open http://localhost:3000 in your browser
+# 5. Open http://localhost:3000 in your browser
 ```
 
 ## Concepts
